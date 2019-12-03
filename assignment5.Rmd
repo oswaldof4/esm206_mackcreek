@@ -1,0 +1,70 @@
+---
+title: "Mack Creek Vertebrates"
+author: "Waldo and Wes"
+date: "11/26/2019"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(effsize)
+```
+
+
+Read in Salamander Data
+```{r}
+MC_Salamanders <- read_csv("mack_creek_vertebrates.csv") %>% 
+    clean_names() %>% 
+  filter(species == "DITE")
+```
+
+
+Wrangle Data (Result A)
+```{r}
+MC_annual_count <- MC_Salamanders %>%  
+  filter(species == "DITE") %>% 
+  mutate(river_type = (case_when(
+            unittype == "C" ~ "Cascade", 
+            unittype == "SC" ~ "Side Channel",
+            unittype == "P" ~ "Pool"))) %>% 
+  mutate(forest_type = (case_when(
+            section == "OG" ~ "Old Growth",
+            section == "CC" ~ "Clear Cut"))) %>% 
+  group_by(year, river_type, forest_type) %>% 
+  summarize(annual_count = n()) 
+```
+
+Graph Data (Result A)
+```{r}
+ggplot(MC_annual_count, aes(x = year, y = annual_count)) +
+geom_line(aes(color = forest_type),
+            size = 1,
+            show.legend = FALSE) + 
+   scale_x_continuous(expand = c(0,0),
+                     limits = c(1993, 2017),
+                     breaks = seq(1993, 2017, by = 1)) +
+  scale_y_continuous(expand = c(0,0),
+                     limits = c(0, 300),
+                     breaks = seq(0, 500, by = 50)) + 
+  theme_minimal()+ 
+  labs(title = "Pacific Giant Salamander Counts by Forest Condition",
+       subtitle = "Mack Creek, OR (1993-2017)",
+       x = "Year",
+       y = "Salamander Count") +
+  theme(axis.text.x = element_text(angle= 45, 
+                                   hjust = 1),
+        axis.ticks = element_line(size = 1)) 
+  
+```
+
+Wrangle Data (Result D)
+```{r}
+MC_weight <- MC_Salamanders %>% 
+  filter(species == "DITE") %>% 
+  mutate(forest_type = (case_when(
+            section == "OG" ~ "Old Growth",
+            section == "CC" ~ "Clear Cut"))) %>% 
+  select(forest_type, weight)
+```
+
