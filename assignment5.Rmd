@@ -5,12 +5,24 @@ date: "11/26/2019"
 output: html_document
 ---
 
-```{r}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 library(tidyverse)
 library(janitor)
 library(effsize)
+library(car)
+library(ggbeeswarm)
 ```
 
+### Introduction
+
+### Data and Methods
+
+DATA AND METHODS: A brief ‘Data and Methods’ section (5 - 6 sentences) summarizing the data and how it was analyzed. Briefly describe the variables being studied in this report. Include the types of statistical tests performed, significance level used, and software (with version) for analysis. Include a map of the area. You can use an already published map of the area, making sure to give appropriate credit to the author / creator) in the map figure caption. 
+
+The data used in this analysis is from an aquatic vertebrate population study conducted at Mack Creek, OR. Since 1993, the study has included length and weight measurements of Pacific Giant Salamanders as well as information about the habitat where these samples were taken. Using preliminary data exploration,   
+
+Citation: Gregory S. V. 2016. Aquatic Vertebrate Population Study in Mack Creek, Andrews Experimental Forest, 1987 to present. Environmental Data Initiative. https://doi.org/10.6073/pasta/5de64af9c11579266ef20da2ff32f702. Dataset accessed 11/19/2019.
 
 Read in Salamander Data
 ```{r}
@@ -60,11 +72,132 @@ geom_line(aes(color = forest_type),
 
 Wrangle Data (Result D)
 ```{r}
-MC_weight <- MC_Salamanders %>% 
-  filter(species == "DITE") %>% 
+MC_weight_17 <- MC_Salamanders %>% 
+  filter(species == "DITE") %>%
+  filter(year == 2017) %>% 
   mutate(forest_type = (case_when(
             section == "OG" ~ "Old Growth",
             section == "CC" ~ "Clear Cut"))) %>% 
   select(forest_type, weight)
+```
+
+Explore Data (Result D)
+```{r}
+ggplot(data = MC_weight_17, aes(sample = weight)) +
+  geom_qq(aes(color = forest_type),
+                 alpha = 0.5,
+                 show.legend = FALSE) +
+  facet_wrap(~forest_type, scales = "free") +
+  labs(title = "QQ-Plot Salamander Weight", 
+       subtitle = "Comparison of different forest environments ~ 2017",
+       y = "Weight [g]", x = "Theorectical") +
+  theme_minimal()
+
+# Shows non-normal distribution. Need to check for significant difference in variances before attempting parametric test
+
+leveneTest(weight ~ forest_type, data = MC_weight_17)
+
+# Does not detect a significant difference in variances, therefore parametric test assumptions are verified
+
+MC_og_sample <- MC_weight_17 %>% 
+  filter(forest_type == "Old Growth") 
+
+MC_cc_sample <- MC_weight_17 %>% 
+  filter(forest_type == "Clear Cut")
+
+
+MC_weight_ttest <- t.test(MC_og_sample$weight, MC_cc_sample$weight)
+MC_weight_ttest
+
+# Does not detect a significant difference in weight between the two groups. However, means are very close together and data was not nomrally distrubted to begin with, so this test might not be the most accurate.
+```
+
+Wrangle Data (Result E)
+```{r}
+MC_rtype_17 <- MC_Salamanders %>% 
+  filter(species == "DITE", year == 2017, 
+         unittype %in% c("C", "SC", "P")) %>%
+  mutate(river_type = (case_when(
+            unittype == "C" ~ "Cascade", 
+            unittype == "SC" ~ "Side Channel",
+            unittype == "P" ~ "Pool"))) %>% 
+  select(river_type, weight)
+
+MC_rtype_summary <- MC_rtype_17 %>% 
+  group_by(river_type) %>% 
+  summarize(
+    mean_weight = mean(weight, na.rm = TRUE),
+    sd_weight = sd(weight, na.rm = TRUE),
+    sample_size = n(),
+    se_weight = sd(weight, na.rm = TRUE) / sqrt(n()),
+    var_weight = var(weight, na.rm = TRUE)
+  )
+```
+
+Explore Data (Result E)
+```{r}
+# Looks alright, but is this the best way to show the data?
+ggplot() +
+  geom_beeswarm(data = MC_rtype_17, dodge.width = 0.8,
+                aes(x = river_type, y = weight, color = river_type),
+                size = 2, alpha = 0.6, show.legend = FALSE) +
+  geom_point(data = MC_rtype_summary, 
+             aes(x = river_type, y = mean_weight),
+             color = "firebrick", csize = 3) +
+  geom_errorbar(data = MC_rtype_summary,
+                aes(x = river_type,
+                    ymin = mean_weight - sd_weight,
+                    ymax = mean_weight + sd_weight),
+                color = "firebrick", width = 0.1) +
+  labs(title = "Salamander Weight Distributions", 
+       subtitle = "Comparison of different water environments ~ 2017",
+       y = "Weight", x = "Water source") +
+  theme_minimal()
+
+# How would I add the 95% confidence interval?
+ggplot() +
+  geom_density(data = MC_rtype_17, stat = "density", aes(x = weight)) +
+  facet_wrap(~river_type)
+
+# Test for significant difference
+
+ggplot(data = MC_rtype_17, aes(sample = weight)) +
+  geom_qq(aes(color = river_type),
+                 alpha = 0.5,
+                 show.legend = FALSE) +
+  facet_wrap(~river_type, scales = "free") +
+  labs(title = "QQ-Plot Salamander Weight", 
+       subtitle = "Comparison of different water environments ~ 2017",
+       y = "Weight [g]", x = "Theorectical") +
+  theme_minimal()
+
+# Shows non-normal distribution. Need to check for significant difference in variances before attempting parametric test
+
+leveneTest(weight ~ river_type, data = MC_rtype_17)
+
+# Does not detect a significant difference in variances, therefore ANOVA test assumptions are verified
+
+MC_rtype_aov <- aov(weight ~ river_type, data = MC_rtype_17)
+summary(MC_rtype_aov)
+
+# Does detect a significant difference in weight between the two groups. Now we need to use Tukey's HSD to find which group-paring differs.
+
+TukeyHSD(MC_rtype_aov)
+
+# Shows that there is significant difference in weight between Salamanders from Side Channel compared to Pool locations
+
+
+MC_rtype_A <- MC_rtype_17 %>% 
+  filter(river_type == "Side Channel")
+
+MC_rtype_B <- MC_rtype_17 %>% 
+  filter(river_type == "Pool")
+
+MC_cohen_d <- cohen.d(MC_rtype_A$weight, MC_rtype_B$weight)
+MC_cohen_d
+
+# Cohen's D shows a small effect size incresaing out confidence in data results 
+
+# Problem with comapring means: data is not normally distrubted, so a better measurement could be medians 
 ```
 
