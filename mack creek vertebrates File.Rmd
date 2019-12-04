@@ -1,0 +1,120 @@
+---
+title: "Giant Pacific Salamanders"
+author: "Waldo and Wes"
+date: "12/2/2019"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+```
+Introduction: 
+
+Summary: 
+
+Photos: 
+
+
+
+```{r}
+#Attach Packages
+library(tidyverse)
+library(janitor)
+library(kableExtra)
+library(effsize)
+```
+
+
+
+```{r}
+#Read in Salamander Data
+MC_Salamanders <- read_csv("mack_creek_vertebrates.csv") %>% 
+    clean_names() %>% 
+  filter(species == "DITE") %>%  
+           mutate(river_type = (case_when(
+            unittype == "C" ~ "Cascade", 
+            unittype == "SC" ~ "Side Channel",
+            unittype == "P" ~ "Pool"))) %>% 
+  mutate(forest_type = (case_when(
+            section == "OG" ~ "Old Growth",
+            section == "CC" ~ "Clear Cut")))
+```
+
+
+```{r}
+#Wrangle Data (Result A)
+MC_annual_count <- MC_Salamanders %>%  
+  filter(species == "DITE") %>% 
+  group_by(year,forest_type) %>% 
+  summarize(annual_count = n())
+```
+
+
+```{r}
+#Graph Data (Result A)
+ggplot(MC_annual_count, aes(x = year, y = annual_count)) +
+geom_line(aes(color = forest_type),
+            size = .5,
+            show.legend = TRUE) + 
+  geom_point(aes(year))+
+   scale_x_continuous(limits = c(1993, 2017),
+                     breaks = seq(1993, 2017, by = 1)) +
+  scale_y_continuous(limits = c(0, 400),
+                     breaks = seq(0, 500, by = 50)) + 
+  theme_minimal()+ 
+  labs(title = "Pacific Giant Salamander Counts in Old Growth and Clear Cut Forest",
+       subtitle = "Mack Creek, HJ Andrews Experimental Forest, OR",
+       x = "Year",
+       y = "Salamander Count", 
+       color = "Forest Condition") +
+  theme(axis.text.x = element_text(angle= 45, 
+                                   hjust = 1),
+        axis.ticks = element_line(size = .5)) 
+  
+```
+**Figure 1** *Salamander counts were recorded in both clear-cut and old-growth forests abutting Mack Creek for 25 years.*
+
+
+
+```{r}
+#Wrangle Data (Result B)
+MC_2017_count <- MC_Salamanders %>% 
+  filter(year == "2017") %>% 
+  filter(unittype %in% c("P", "C", "SC")) %>% 
+  count(river_type, forest_type)
+
+MC_table <- MC_2017_count %>% 
+  pivot_wider(names_from = river_type, values_from = n)
+
+MC_proportion <- MC_table %>% 
+  adorn_percentages(denominator = "row") %>% 
+  adorn_pct_formatting(digits = 0)  %>% 
+  rename("Forest Condition" = forest_type)
+```
+
+
+
+```{r}
+#Table Data (Result B)
+kable(MC_proportion) %>% 
+  kable_styling(bootstrap_options = "basic") 
+```
+**Figure 2.** *Proportion of salamanders found in different stream types within clear-cut and old-growth forests during 2017.* 
+
+
+```{r}
+#Wrangle Data (Result C) 
+Sal_chi_test <- MC_table %>%  
+  pivot_longer(cols = c("Cascade","Pool", "Side Channel")) %>% 
+  pivot_wider(names_from = forest_type) %>% 
+  select(-name)
+```
+
+
+
+```{r}
+#Chi-Squared Test (Result C)
+Sal_chi_results <- chisq.test(Sal_chi_test)
+```
+Forest conditions do not affect the proportion of salamanders found in cascades, pools, or side channels. 
+($\chi$^2^(`r Sal_chi_results$parameter`) = `r round(Sal_chi_results$statistic,2)`, p = `r round(Sal_chi_results$p.value, 3)`).
